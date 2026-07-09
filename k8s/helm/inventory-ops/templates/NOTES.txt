@@ -1,0 +1,8 @@
+Retail Inventory Ops is deployed.
+
+Scenario label: {{ .Values.environment.scenarioLabel }}
+UI service: {{ include "inventory-ops.fullname" . }}-ui
+API service: {{ include "inventory-ops.fullname" . }}-api
+
+For a LoadBalancer UI service:
+  kubectl get svc {{ include "inventory-ops.fullname" . }}-ui

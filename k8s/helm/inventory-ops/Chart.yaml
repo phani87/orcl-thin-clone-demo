@@ -1,0 +1,6 @@
+apiVersion: v2
+name: inventory-ops
+description: Retail Inventory Ops app for Oracle ExaDB-XS thin-clone demos
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

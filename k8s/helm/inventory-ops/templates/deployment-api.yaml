@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "inventory-ops.fullname" . }}-api
+  labels:
+    {{- include "inventory-ops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "inventory-ops.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "inventory-ops.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        retail.oracle.com/scenario-label: {{ .Values.environment.scenarioLabel | quote }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: APP_ENV
+              value: {{ .Values.environment.appEnv | quote }}
+            - name: SCENARIO_LABEL
+              value: {{ .Values.environment.scenarioLabel | quote }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "inventory-ops.dbSecretName" . }}
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "inventory-ops.dbSecretName" . }}
+                  key: DB_PASSWORD
+            - name: DB_CONNECT_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "inventory-ops.dbSecretName" . }}
+                  key: DB_CONNECT_STRING
+            {{- if .Values.wallet.enabled }}
+            - name: TNS_ADMIN
+              value: {{ .Values.wallet.mountPath | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          {{- if .Values.wallet.enabled }}
+          volumeMounts:
+            - name: db-wallet
+              mountPath: {{ .Values.wallet.mountPath | quote }}
+              readOnly: true
+          {{- end }}
+      {{- if .Values.wallet.enabled }}
+      volumes:
+        - name: db-wallet
+          secret:
+            secretName: {{ .Values.wallet.secretName }}
+      {{- end }}

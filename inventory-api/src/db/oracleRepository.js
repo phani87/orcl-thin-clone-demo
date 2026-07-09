@@ -1,0 +1,362 @@
+import { buildScenarioActions, scenarioTemplateFor } from "../services/inventorySignals.js";
+
+function rowLimit(limit, fallback = 50, max = 500) {
+  const parsed = Number(limit || fallback);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+function mapScenario(row) {
+  return {
+    scenarioId: row.scenarioId,
+    scenarioName: row.scenarioName,
+    scenarioType: row.scenarioType,
+    status: row.status,
+    requestedBy: row.requestedBy,
+    createdAt: row.createdAt,
+    appliedAt: row.appliedAt,
+    notes: row.notes
+  };
+}
+
+function createDemoStorePayload(payload = {}) {
+  const suffix = String(Date.now()).slice(-6);
+  return {
+    storeCode: payload.storeCode || `CLN${suffix}`,
+    storeName: payload.storeName || `Clone Showcase Store ${suffix}`,
+    regionName: payload.regionName || "Clone Lab",
+    city: payload.city || "San Jose",
+    stateCode: payload.stateCode || "CA",
+    storeFormat: payload.storeFormat || "Urban",
+    status: payload.status || "OPEN"
+  };
+}
+
+export async function createOracleRepository(config) {
+  const oracleModule = await import("oracledb");
+  const oracledb = oracleModule.default ?? oracleModule;
+  oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+
+  const pool = await oracledb.createPool({
+    user: config.db.user,
+    password: config.db.password,
+    connectString: config.db.connectString,
+    poolMin: config.db.poolMin,
+    poolMax: config.db.poolMax,
+    poolIncrement: config.db.poolIncrement
+  });
+
+  async function withConnection(work) {
+    const connection = await pool.getConnection();
+    try {
+      return await work(connection);
+    } finally {
+      await connection.close();
+    }
+  }
+
+  async function query(sql, binds = {}, options = {}) {
+    return withConnection(async (connection) => {
+      const result = await connection.execute(sql, binds, {
+        outFormat: oracledb.OUT_FORMAT_OBJECT,
+        ...options
+      });
+      return result.rows || [];
+    });
+  }
+
+  return {
+    kind: "oracle",
+
+    async close() {
+      await pool.close(10);
+    },
+
+    async health() {
+      const rows = await query(`select 1 as "databaseOk" from dual`);
+      return {
+        databaseReachable: rows[0]?.databaseOk === 1,
+        connectString: config.db.connectString
+      };
+    },
+
+    async getInventorySummary() {
+      const [totals] = await query(`
+        select
+          (select count(*) from retail_stores) as "stores",
+          (select count(*) from retail_warehouses) as "warehouses",
+          (select count(*) from retail_products) as "products",
+          (select count(*) from inventory_positions) as "inventoryPositions",
+          (select count(*) from customer_orders) as "orders",
+          (select nvl(sum(on_hand), 0) from inventory_positions) as "totalOnHand",
+          (select nvl(sum(reserved_qty), 0) from inventory_positions) as "totalReserved"
+        from dual
+      `);
+      const [status] = await query(`
+        select
+          sum(case when stock_status = 'CRITICAL' then 1 else 0 end) as "critical",
+          sum(case when stock_status = 'LOW' then 1 else 0 end) as "low",
+          sum(case when stock_status = 'HEALTHY' then 1 else 0 end) as "healthy",
+          sum(case when stock_status = 'OVERSTOCK' then 1 else 0 end) as "overstock"
+        from v_inventory_health
+      `);
+      const topCategories = await query(`
+        select * from (
+          select category as "category", sum(on_hand) as "onHand"
+          from v_inventory_health
+          group by category
+          order by sum(on_hand) desc
+        )
+        where rownum <= 6
+      `);
+
+      return {
+        appEnv: config.appEnv,
+        scenarioLabel: config.scenarioLabel,
+        dataSource: "oracle",
+        generatedAt: new Date().toISOString(),
+        totals,
+        stockStatus: status,
+        topCategories
+      };
+    },
+
+    async listStores({ limit, region } = {}) {
+      return query(`
+        select * from (
+          select
+            store_id as "storeId",
+            store_code as "storeCode",
+            store_name as "storeName",
+            region_name as "regionName",
+            city as "city",
+            state_code as "stateCode",
+            store_format as "storeFormat",
+            status as "status"
+          from retail_stores
+          where (:region is null or region_name = :region)
+          order by store_code
+        )
+        where rownum <= :limit
+      `, { region: region || null, limit: rowLimit(limit, 50, 500) });
+    },
+
+    async addDemoStore(payload = {}) {
+      const store = createDemoStorePayload(payload);
+      return withConnection(async (connection) => {
+        const result = await connection.execute(
+          `insert into retail_stores (store_code, store_name, region_name, city, state_code, store_format, status)
+           values (:storeCode, :storeName, :regionName, :city, :stateCode, :storeFormat, :status)
+           returning store_id into :storeId`,
+          {
+            ...store,
+            storeId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+          },
+          { autoCommit: true }
+        );
+
+        return {
+          storeId: result.outBinds.storeId[0],
+          ...store,
+          message: `Added demo store ${store.storeCode} in ${config.scenarioLabel}`
+        };
+      });
+    },
+
+    async listProducts({ limit, search, category } = {}) {
+      return query(`
+        select * from (
+          select
+            product_id as "productId",
+            sku as "sku",
+            product_name as "productName",
+            category as "category",
+            subcategory as "subcategory",
+            brand as "brand",
+            unit_price as "unitPrice",
+            lifecycle_status as "lifecycleStatus"
+          from retail_products
+          where (:category is null or category = :category)
+            and (:search is null or lower(product_name) like '%' || lower(:search) || '%' or lower(sku) like '%' || lower(:search) || '%')
+          order by sku
+        )
+        where rownum <= :limit
+      `, { category: category || null, search: search || null, limit: rowLimit(limit, 50, 500) });
+    },
+
+    async getReplenishmentRecommendations({ limit, region } = {}) {
+      return query(`
+        select * from (
+          select
+            product_id as "productId",
+            sku as "sku",
+            product_name as "productName",
+            category as "category",
+            location_id as "locationId",
+            location_code as "locationCode",
+            location_name as "locationName",
+            region_name as "regionName",
+            on_hand as "onHand",
+            reserved_qty as "reservedQty",
+            reorder_point as "reorderPoint",
+            reorder_qty as "reorderQty",
+            safety_stock as "safetyStock",
+            stock_status as "stockStatus",
+            greatest(0, reorder_point + reorder_qty - on_hand) as "recommendedQty"
+          from v_inventory_health
+          where location_type = 'STORE'
+            and stock_status in ('CRITICAL', 'LOW')
+            and (:region is null or region_name = :region)
+          order by case stock_status when 'CRITICAL' then 1 when 'LOW' then 2 else 3 end,
+                   greatest(0, reorder_point + reorder_qty - on_hand) desc
+        )
+        where rownum <= :limit
+      `, { region: region || null, limit: rowLimit(limit, 40, 250) });
+    },
+
+    async listScenarios() {
+      const rows = await query(`
+        select * from (
+          select
+            scenario_id as "scenarioId",
+            scenario_name as "scenarioName",
+            scenario_type as "scenarioType",
+            status as "status",
+            requested_by as "requestedBy",
+            created_at as "createdAt",
+            applied_at as "appliedAt",
+            notes as "notes"
+          from inventory_scenarios
+          order by created_at desc
+        )
+        where rownum <= 50
+      `);
+      return rows.map(mapScenario);
+    },
+
+    async createScenario(payload = {}) {
+      const template = scenarioTemplateFor(payload.id || `scenario-${Date.now()}`, payload);
+      return withConnection(async (connection) => {
+        const result = await connection.execute(
+          `insert into inventory_scenarios (scenario_name, scenario_type, status, requested_by, notes)
+           values (:scenarioName, :scenarioType, 'DRAFT', :requestedBy, :notes)
+           returning scenario_id into :scenarioId`,
+          {
+            scenarioName: template.scenarioName,
+            scenarioType: template.scenarioType,
+            requestedBy: payload.requestedBy || "demo-user",
+            notes: template.notes,
+            scenarioId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+          },
+          { autoCommit: true }
+        );
+
+        return {
+          scenarioId: result.outBinds.scenarioId[0],
+          scenarioName: template.scenarioName,
+          scenarioType: template.scenarioType,
+          status: "DRAFT",
+          requestedBy: payload.requestedBy || "demo-user",
+          notes: template.notes
+        };
+      });
+    },
+
+    async applyScenario(id, payload = {}) {
+      const template = scenarioTemplateFor(id, payload);
+      const recommendations = await this.getReplenishmentRecommendations({
+        limit: Number(payload.maxActions || 25),
+        region: template.region
+      });
+      const actions = buildScenarioActions(recommendations, template, Number(payload.maxActions || 25));
+
+      return withConnection(async (connection) => {
+        try {
+          const scenarioResult = await connection.execute(
+            `insert into inventory_scenarios (scenario_name, scenario_type, status, requested_by, notes)
+             values (:scenarioName, :scenarioType, 'DRAFT', :requestedBy, :notes)
+             returning scenario_id into :scenarioId`,
+            {
+              scenarioName: template.scenarioName,
+              scenarioType: template.scenarioType,
+              requestedBy: payload.requestedBy || "demo-user",
+              notes: template.notes,
+              scenarioId: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+            }
+          );
+          const scenarioId = scenarioResult.outBinds.scenarioId[0];
+
+          for (const action of actions) {
+            const positionBinds = {
+              productId: action.productId,
+              locationType: action.locationType,
+              locationId: action.locationId,
+              quantityDelta: action.quantityDelta
+            };
+            const scenarioActionBinds = {
+              scenarioId,
+              actionType: action.actionType,
+              productId: action.productId,
+              locationType: action.locationType,
+              locationId: action.locationId,
+              quantityDelta: action.quantityDelta
+            };
+            const inventoryEventBinds = {
+              productId: action.productId,
+              locationType: action.locationType,
+              locationId: action.locationId,
+              quantityDelta: action.quantityDelta,
+              referenceId: `SCENARIO-${scenarioId}-${action.productId}-${action.locationId}`,
+              scenarioId
+            };
+            await connection.execute(
+              `update inventory_positions
+               set on_hand = on_hand + :quantityDelta,
+                   last_updated = systimestamp
+               where product_id = :productId
+                 and location_type = :locationType
+                 and location_id = :locationId`,
+              positionBinds
+            );
+            await connection.execute(
+              `insert into scenario_actions (scenario_id, action_type, product_id, location_type, location_id, quantity_delta, status)
+               values (:scenarioId, :actionType, :productId, :locationType, :locationId, :quantityDelta, 'APPLIED')`,
+              scenarioActionBinds
+            );
+            await connection.execute(
+              `insert into inventory_events (product_id, location_type, location_id, event_type, quantity_delta, reference_id, scenario_id)
+               values (:productId, :locationType, :locationId, 'SCENARIO', :quantityDelta, :referenceId, :scenarioId)`,
+              inventoryEventBinds
+            );
+          }
+
+          await connection.execute(
+            `update inventory_scenarios
+             set status = 'APPLIED', applied_at = systimestamp
+             where scenario_id = :scenarioId`,
+            { scenarioId }
+          );
+          await connection.commit();
+
+          return {
+            scenario: {
+              scenarioId,
+              scenarioName: template.scenarioName,
+              scenarioType: template.scenarioType,
+              status: "APPLIED",
+              requestedBy: payload.requestedBy || "demo-user",
+              appliedAt: new Date().toISOString(),
+              notes: template.notes
+            },
+            actions,
+            mutatedPositions: actions.length,
+            message: `Applied ${actions.length} replenishment actions in ${config.scenarioLabel}`
+          };
+        } catch (error) {
+          await connection.rollback();
+          throw error;
+        }
+      });
+    }
+  };
+}

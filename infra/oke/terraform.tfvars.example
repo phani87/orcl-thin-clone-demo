@@ -1,0 +1,29 @@
+region             = "us-ashburn-1"
+oci_profile        = "DEFAULT"
+compartment_id     = "ocid1.compartment.oc1..replace"
+name_prefix        = "retail-inventory"
+kubernetes_version = "v1.31.1"
+vcn_id             = "ocid1.vcn.oc1.iad.replace"
+
+cluster_endpoint_subnet_id = "ocid1.subnet.oc1.iad.endpoint"
+service_lb_subnet_ids      = ["ocid1.subnet.oc1.iad.loadbalancer-a", "ocid1.subnet.oc1.iad.loadbalancer-b"]
+pod_subnet_ids             = ["ocid1.subnet.oc1.iad.pods-a", "ocid1.subnet.oc1.iad.pods-b"]
+
+node_placement_configs = [
+  {
+    availability_domain = "abcd:US-ASHBURN-AD-1"
+    subnet_id           = "ocid1.subnet.oc1.iad.workers-a"
+  },
+  {
+    availability_domain = "abcd:US-ASHBURN-AD-2"
+    subnet_id           = "ocid1.subnet.oc1.iad.workers-b"
+  }
+]
+
+public_endpoint        = false
+node_shape             = "VM.Standard.E5.Flex"
+node_ocpus             = 2
+node_memory_gbs        = 16
+node_count_per_cluster = 3
+node_image_id          = null
+ssh_public_key         = null

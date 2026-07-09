@@ -1,0 +1,60 @@
+environment:
+  appEnv: production-like
+  scenarioLabel: source
+
+imagePullSecrets: []
+
+api:
+  replicaCount: 2
+  image:
+    repository: iad.ocir.io/namespace/retail-inventory-api
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+ui:
+  replicaCount: 2
+  image:
+    repository: iad.ocir.io/namespace/retail-inventory-ui
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+db:
+  createSecret: false
+  existingSecret: inventory-ops-db
+  secretNameOverride: ""
+  user: retail_app
+  password: ""
+  connectString: ""
+  tnsAdmin: ""
+
+wallet:
+  enabled: false
+  secretName: inventory-ops-wallet
+  mountPath: /app/wallet
+
+ingress:
+  enabled: false
+  className: ""
+  host: inventory-ops.example.com
+  annotations: {}
+  tls: []

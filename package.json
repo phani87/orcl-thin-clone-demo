@@ -1,0 +1,24 @@
+{
+  "name": "retail-inventory-thin-clone-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Retail Inventory Ops demo for Kubernetes, OKE, and Oracle ExaDB-XS thin-cloned PDBs.",
+  "workspaces": [
+    "inventory-api",
+    "inventory-ui",
+    "db"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "dev:api": "npm --workspace inventory-api run dev",
+    "dev:ui": "npm --workspace inventory-ui run dev",
+    "build": "npm run build --workspaces --if-present",
+    "db:migrate": "npm --workspace @retail-thin-clone/db-tools run migrate",
+    "db:seed": "npm --workspace @retail-thin-clone/db-tools run seed",
+    "helm:template": "helm template inventory-ops ./k8s/helm/inventory-ops",
+    "terraform:validate": "terraform -chdir=infra/oke validate"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

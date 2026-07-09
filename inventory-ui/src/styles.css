@@ -24,6 +24,14 @@ body {
   min-width: 320px;
 }
 
+body[data-mode="clone"] {
+  --teal: #7c3aed;
+  --blue: #5b7cfa;
+  --green: #0f9f7f;
+  --amber: #c77900;
+  background: #f3f0fb;
+}
+
 button,
 input,
 select {
@@ -86,6 +94,10 @@ select {
   margin-top: 3px;
 }
 
+body[data-mode="clone"] .brand-mark {
+  background: #7c3aed;
+}
+
 .sidebar nav {
   display: grid;
   gap: 8px;
@@ -103,6 +115,11 @@ select {
 
 .sidebar nav a:hover {
   background: #243340;
+}
+
+body[data-mode="clone"] .sidebar nav a:hover,
+body[data-mode="clone"] .environment {
+  background: #312141;
 }
 
 .environment {
@@ -148,6 +165,26 @@ select {
   flex-wrap: wrap;
 }
 
+.clone-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #e6f3f2;
+  color: #0f766e;
+  border: 1px solid #b6d8d4;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+body[data-mode="clone"] .clone-badge {
+  background: #efe7ff;
+  color: #5b21b6;
+  border-color: #d9c6ff;
+}
+
 .eyebrow {
   color: var(--teal);
   font-size: 0.74rem;
@@ -171,6 +208,12 @@ select {
   gap: 8px;
   padding: 0 14px;
   border-radius: 8px;
+}
+
+.icon-button.clone-action {
+  background: #efe7ff;
+  border-color: #d9c6ff;
+  color: #5b21b6;
 }
 
 .icon-button:disabled,

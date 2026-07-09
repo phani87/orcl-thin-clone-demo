@@ -1,5 +1,5 @@
 import { buildRetailData, SCALE_PRESETS } from "../../../db/seed/generateRetailData.mjs";
-import { buildCatalogExpansionPlan } from "../services/catalogExpansion.js";
+import { buildEnvironmentExpansionPlan } from "../services/environmentExpansion.js";
 import {
   buildScenarioActions,
   rankRecommendations,
@@ -151,6 +151,22 @@ export function createMockRepository(config) {
         }));
     },
 
+    async listWarehouses({ limit, region } = {}) {
+      return data.warehouses
+        .filter((warehouse) => !region || warehouse.region_name === region)
+        .slice(0, limit || 50)
+        .map((warehouse) => ({
+          warehouseId: warehouse.warehouse_id,
+          warehouseCode: warehouse.warehouse_code,
+          warehouseName: warehouse.warehouse_name,
+          regionName: warehouse.region_name,
+          city: warehouse.city,
+          stateCode: warehouse.state_code,
+          capacityUnits: warehouse.capacity_units,
+          status: warehouse.status
+        }));
+    },
+
     async addDemoStore(payload = {}) {
       const store = createDemoStorePayload(payload);
       const storeId = Math.max(...data.stores.map((item) => item.store_id), 0) + 1;
@@ -172,15 +188,44 @@ export function createMockRepository(config) {
       };
     },
 
-    async expandCatalog(payload = {}) {
-      const plan = buildCatalogExpansionPlan({
+    async expandEnvironment(payload = {}) {
+      const plan = buildEnvironmentExpansionPlan({
+        currentStoreCount: data.stores.length,
+        currentWarehouseCount: data.warehouses.length,
         currentProductCount: data.products.length,
         currentPositionCount: data.positions.length,
+        targetStores: payload.targetStores,
+        targetWarehouses: payload.targetWarehouses,
         targetProducts: payload.targetProducts,
         targetPositions: payload.targetPositions,
-        stores: data.stores,
-        warehouses: data.warehouses
+        existingStores: data.stores,
+        existingWarehouses: data.warehouses,
+        existingProducts: data.products,
+        existingPositionKeys: data.positions.map((position) => `${position.product_id}:${position.location_type}:${position.location_id}`)
       });
+
+      data.stores.push(...plan.stores.map((store) => ({
+        store_id: store.storeId,
+        store_code: store.storeCode,
+        store_name: store.storeName,
+        region_name: store.regionName,
+        city: store.city,
+        state_code: store.stateCode,
+        store_format: store.storeFormat,
+        status: store.status,
+        opened_on: new Date()
+      })));
+
+      data.warehouses.push(...plan.warehouses.map((warehouse) => ({
+        warehouse_id: warehouse.warehouseId,
+        warehouse_code: warehouse.warehouseCode,
+        warehouse_name: warehouse.warehouseName,
+        region_name: warehouse.regionName,
+        city: warehouse.city,
+        state_code: warehouse.stateCode,
+        capacity_units: warehouse.capacityUnits,
+        status: warehouse.status
+      })));
 
       data.products.push(...plan.products.map((product) => ({
         product_id: product.productId,
@@ -208,14 +253,21 @@ export function createMockRepository(config) {
       })));
 
       return {
+        addedStores: plan.stores.length,
+        addedWarehouses: plan.warehouses.length,
         addedProducts: plan.products.length,
         addedPositions: plan.positions.length,
-        totals: {
-          products: data.products.length,
-          inventoryPositions: data.positions.length
-        },
-        message: `Expanded ${config.scenarioLabel} by ${plan.products.length} products and ${plan.positions.length} positions`
+        totals: plan.totals,
+        message: `Expanded ${config.scenarioLabel}: +${plan.stores.length} stores, +${plan.warehouses.length} warehouses, +${plan.products.length} products, +${plan.positions.length} positions`
       };
+    },
+
+    async expandCatalog(payload = {}) {
+      return this.expandEnvironment({
+        targetProducts: payload.targetProducts,
+        targetPositions: payload.targetPositions,
+        requestedBy: payload.requestedBy
+      });
     },
 
     async listProducts({ limit, search, category } = {}) {

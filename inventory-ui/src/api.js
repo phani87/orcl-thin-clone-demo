@@ -23,7 +23,12 @@ export const inventoryApi = {
   health: () => request("/health"),
   summary: () => request("/inventory/summary"),
   stores: () => request("/stores?limit=12"),
+  warehouses: () => request("/warehouses?limit=12"),
   addDemoStore: (payload = {}) => request("/stores/demo", {
+    method: "POST",
+    body: JSON.stringify({ requestedBy: "retail-ops-demo", ...payload })
+  }),
+  expandEnvironment: (payload = {}) => request("/environment/expand", {
     method: "POST",
     body: JSON.stringify({ requestedBy: "retail-ops-demo", ...payload })
   }),

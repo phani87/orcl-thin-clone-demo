@@ -41,6 +41,13 @@ export function createRouter({ repository, config }) {
     }));
   }));
 
+  router.get("/warehouses", asyncHandler(async (request, response) => {
+    response.json(await repository.listWarehouses({
+      limit: parseLimit(request.query.limit, 50, 500),
+      region: request.query.region
+    }));
+  }));
+
   router.post("/stores/demo", asyncHandler(async (request, response) => {
     const store = await repository.addDemoStore(request.body || {});
     response.status(201).json(store);
@@ -48,6 +55,11 @@ export function createRouter({ repository, config }) {
 
   router.post("/catalog/expand", asyncHandler(async (request, response) => {
     const result = await repository.expandCatalog(request.body || {});
+    response.status(201).json(result);
+  }));
+
+  router.post("/environment/expand", asyncHandler(async (request, response) => {
+    const result = await repository.expandEnvironment(request.body || {});
     response.status(201).json(result);
   }));
 

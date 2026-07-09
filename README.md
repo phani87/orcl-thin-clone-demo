@@ -33,15 +33,16 @@ That makes this a development and testing workflow, not a DR workflow.
 
 ## Application overview
 
-The app focuses on retail inventory operations. It exposes a dashboard for inventory health, replenishment recommendations, scenario testing, products, and stores. The same UI and API are deployed for both the source and clone environments. The only difference between those deployments is configuration: each points to a different pluggable database.
+The app focuses on retail inventory operations. It exposes a dashboard for inventory health, replenishment recommendations, scenario testing, products, stores, and environment scaling. The same UI and API are deployed for both the source and clone environments. The only difference between those deployments is configuration: each points to a different pluggable database. The UI still makes the distinction visible with environment labeling and clone-specific visual cues.
 
 Core API endpoints include:
 
 - `GET /api/health`
 - `GET /api/inventory/summary`
 - `GET /api/stores`
+- `GET /api/warehouses`
 - `POST /api/stores/demo`
-- `POST /api/catalog/expand`
+- `POST /api/environment/expand`
 - `GET /api/products`
 - `GET /api/replenishment/recommendations`
 - `GET /api/scenarios`
@@ -236,40 +237,59 @@ The expected result is:
 
 The application includes interactive controls for:
 
-- adding a demo store
+- scaling stores, warehouses, products, and positions
 - applying scenario mutations
-- expanding the catalog to higher product and position counts
 
 For isolated testing, point those actions at the clone deployment.
 
-### Add a demo store in the clone deployment
+### Scale the clone to 350 stores
 
 ```bash
-curl -X POST http://127.0.0.1:3001/api/stores/demo \
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
   -H "Content-Type: application/json" \
   -d '{
-    "storeCode": "CLN252",
-    "storeName": "Clone Demo Store 252",
-    "regionName": "Clone Lab",
-    "city": "San Jose",
-    "stateCode": "CA",
-    "storeFormat": "Urban",
-    "status": "OPEN"
+    "targetStores": 350,
+    "requestedBy": "retail-ops-demo"
   }'
 ```
 
-### Expand the clone catalog by API
-
-This example takes the clone from `20,000` products and `300,000` positions to `22,000` products and `430,000` positions:
+### Scale the clone to 100 warehouses
 
 ```bash
-curl -X POST http://127.0.0.1:3001/api/catalog/expand \
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
   -H "Content-Type: application/json" \
   -d '{
-    "targetProducts": 22000,
-    "targetPositions": 430000,
+    "targetWarehouses": 100,
     "requestedBy": "retail-ops-demo"
   }'
+```
+
+### Scale the clone to 35,000 products
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetProducts": 35000,
+    "requestedBy": "retail-ops-demo"
+  }'
+```
+
+### Scale the clone to 370,000 positions
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetPositions": 370000,
+    "requestedBy": "retail-ops-demo"
+  }'
+```
+
+### Run the bundled clone expansion script
+
+```bash
+./scripts/expand-clone-data.sh
 ```
 
 You can verify the new totals with:

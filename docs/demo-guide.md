@@ -119,32 +119,54 @@ Acceptance criteria:
 
 The same API is deployed to both environments. For isolated testing, send these calls to the clone deployment on port `3001`.
 
-Add a demo store in the clone deployment:
+Scale clone stores to `350`:
 
 ```bash
-curl -X POST http://127.0.0.1:3001/api/stores/demo \
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
   -H "Content-Type: application/json" \
   -d '{
-    "storeCode": "CLN252",
-    "storeName": "Clone Demo Store 252",
-    "regionName": "Clone Lab",
-    "city": "San Jose",
-    "stateCode": "CA",
-    "storeFormat": "Urban",
-    "status": "OPEN"
+    "targetStores": 350,
+    "requestedBy": "retail-ops-demo"
   }'
 ```
 
-Grow the clone from `20,000` products / `300,000` positions to `22,000` products / `430,000` positions:
+Scale clone warehouses to `100`:
 
 ```bash
-curl -X POST http://127.0.0.1:3001/api/catalog/expand \
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
   -H "Content-Type: application/json" \
   -d '{
-    "targetProducts": 22000,
-    "targetPositions": 430000,
+    "targetWarehouses": 100,
     "requestedBy": "retail-ops-demo"
   }'
+```
+
+Scale clone products to `35,000`:
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetProducts": 35000,
+    "requestedBy": "retail-ops-demo"
+  }'
+```
+
+Scale clone positions to `370,000`:
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/environment/expand \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetPositions": 370000,
+    "requestedBy": "retail-ops-demo"
+  }'
+```
+
+Or run the bundled script:
+
+```bash
+./scripts/expand-clone-data.sh
 ```
 
 Validate the new totals:

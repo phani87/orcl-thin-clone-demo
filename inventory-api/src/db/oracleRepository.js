@@ -212,9 +212,13 @@ export async function createOracleRepository(config) {
         const [counts] = await query(`
           select
             (select count(*) from retail_stores) as "stores",
+            (select nvl(max(store_id), 0) from retail_stores) as "maxStoreId",
             (select count(*) from retail_warehouses) as "warehouses",
+            (select nvl(max(warehouse_id), 0) from retail_warehouses) as "maxWarehouseId",
             (select count(*) from retail_products) as "products",
-            (select count(*) from inventory_positions) as "inventoryPositions"
+            (select nvl(max(product_id), 0) from retail_products) as "maxProductId",
+            (select count(*) from inventory_positions) as "inventoryPositions",
+            (select nvl(max(position_id), 0) from inventory_positions) as "maxPositionId"
           from dual
         `);
         const stores = await query(`
@@ -262,6 +266,10 @@ export async function createOracleRepository(config) {
           currentWarehouseCount: counts.warehouses,
           currentProductCount: counts.products,
           currentPositionCount: counts.inventoryPositions,
+          currentMaxStoreId: counts.maxStoreId,
+          currentMaxWarehouseId: counts.maxWarehouseId,
+          currentMaxProductId: counts.maxProductId,
+          currentMaxPositionId: counts.maxPositionId,
           targetStores: payload.targetStores,
           targetWarehouses: payload.targetWarehouses,
           targetProducts: payload.targetProducts,

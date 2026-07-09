@@ -131,6 +131,10 @@ export function buildEnvironmentExpansionPlan({
   currentWarehouseCount,
   currentProductCount,
   currentPositionCount,
+  currentMaxStoreId,
+  currentMaxWarehouseId,
+  currentMaxProductId,
+  currentMaxPositionId,
   targetStores,
   targetWarehouses,
   targetProducts,
@@ -150,14 +154,31 @@ export function buildEnvironmentExpansionPlan({
   const deltaProducts = desiredProducts - Number(currentProductCount || 0);
   const deltaPositions = desiredPositions - Number(currentPositionCount || 0);
 
+  const nextStoreBase = Number(
+    currentMaxStoreId
+      ?? existingStores.reduce((max, store) => Math.max(max, Number(storeRef(store).storeId || 0)), 0)
+      ?? 0
+  );
+  const nextWarehouseBase = Number(
+    currentMaxWarehouseId
+      ?? existingWarehouses.reduce((max, warehouse) => Math.max(max, Number(warehouseRef(warehouse).warehouseId || 0)), 0)
+      ?? 0
+  );
+  const nextProductBase = Number(
+    currentMaxProductId
+      ?? existingProducts.reduce((max, product) => Math.max(max, Number(productRef(product).productId || 0)), 0)
+      ?? 0
+  );
+  const nextPositionBase = Number(currentMaxPositionId || 0);
+
   const stores = Array.from({ length: deltaStores }, (_, index) =>
-    buildStore(Number(currentStoreCount || 0) + index + 1, Number(currentStoreCount || 0) + index)
+    buildStore(nextStoreBase + index + 1, nextStoreBase + index)
   );
   const warehouses = Array.from({ length: deltaWarehouses }, (_, index) =>
-    buildWarehouse(Number(currentWarehouseCount || 0) + index + 1, Number(currentWarehouseCount || 0) + index)
+    buildWarehouse(nextWarehouseBase + index + 1, nextWarehouseBase + index)
   );
   const products = Array.from({ length: deltaProducts }, (_, index) =>
-    buildProduct(Number(currentProductCount || 0) + index + 1, Number(currentProductCount || 0) + index)
+    buildProduct(nextProductBase + index + 1, nextProductBase + index)
   );
 
   const allLocations = [
@@ -183,7 +204,7 @@ export function buildEnvironmentExpansionPlan({
 
   const positions = [];
   let attempts = 0;
-  let nextPositionId = Number(currentPositionCount || 0) + 1;
+  let nextPositionId = nextPositionBase + 1;
   const maxAttempts = Math.max(deltaPositions * 20, 1000);
 
   while (positions.length < deltaPositions) {

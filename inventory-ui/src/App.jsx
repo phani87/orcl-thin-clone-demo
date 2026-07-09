@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Database,
   Factory,
+  Gauge,
   Layers,
   PackageSearch,
   Play,
@@ -32,12 +33,6 @@ function formatNumber(value) {
 
 function statusClass(status) {
   return String(status || "").toLowerCase().replaceAll("_", "-");
-}
-
-function isCloneEnvironment(health) {
-  const label = String(health?.scenarioLabel || "").toLowerCase();
-  const appEnv = String(health?.appEnv || "").toLowerCase();
-  return label.includes("clone") || appEnv.includes("clone");
 }
 
 function Metric({ icon: Icon, label, value, tone }) {
@@ -129,7 +124,7 @@ function ScenarioPanel({ scenarios, applying, onApply }) {
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">Clone Test</span>
+          <span className="eyebrow">Scenario Test</span>
           <h2>Apply scenario</h2>
         </div>
         <ClipboardCheck size={20} />
@@ -186,7 +181,7 @@ function CloneStorePanel({ addingStore, onAddStore }) {
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">Clone Change</span>
+          <span className="eyebrow">Data Change</span>
           <h2>Add store</h2>
         </div>
         <Store size={20} />
@@ -208,7 +203,7 @@ function CloneStorePanel({ addingStore, onAddStore }) {
           </label>
           <label className="field field-span-2">
             <span>Name</span>
-            <input className="text-input" name="storeName" value={form.storeName} onChange={updateField} placeholder="Clone Showcase Store" />
+            <input className="text-input" name="storeName" value={form.storeName} onChange={updateField} placeholder="Demo Showcase Store" />
           </label>
           <label className="field">
             <span>Region</span>
@@ -227,6 +222,69 @@ function CloneStorePanel({ addingStore, onAddStore }) {
           <button type="submit" className="icon-button clone-action" disabled={addingStore}>
             <Store size={18} aria-hidden="true" />
             <span>{addingStore ? "Adding Store..." : "Create Store in Clone"}</span>
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function CloneGrowthPanel({ expandingCatalog, onExpandCatalog, totals }) {
+  const [form, setForm] = useState({
+    targetProducts: 22000,
+    targetPositions: 430000
+  });
+
+  function updateField(event) {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    await onExpandCatalog({
+      targetProducts: Number(form.targetProducts),
+      targetPositions: Number(form.targetPositions)
+    });
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">Data Change</span>
+          <h2>Grow catalog</h2>
+        </div>
+        <Gauge size={20} />
+      </div>
+      <p className="panel-copy">
+        Expand the active environment from 20,000 products and 300,000 positions to 22,000 products and 430,000 positions.
+      </p>
+      <form className="store-form" onSubmit={submit}>
+        <div className="field-grid">
+          <label className="field">
+            <span>Target products</span>
+            <input className="text-input" type="number" min="1" name="targetProducts" value={form.targetProducts} onChange={updateField} />
+          </label>
+          <label className="field">
+            <span>Target positions</span>
+            <input className="text-input" type="number" min="1" name="targetPositions" value={form.targetPositions} onChange={updateField} />
+          </label>
+        </div>
+        <div className="growth-stats">
+          <div>
+            <span>Current products</span>
+            <strong>{formatNumber(totals.products)}</strong>
+          </div>
+          <div>
+            <span>Current positions</span>
+            <strong>{formatNumber(totals.inventoryPositions)}</strong>
+          </div>
+        </div>
+        <div className="panel-actions">
+          <button type="submit" className="icon-button clone-action" disabled={expandingCatalog}>
+            <Gauge size={18} aria-hidden="true" />
+            <span>{expandingCatalog ? "Growing Clone..." : "Expand Clone Catalog"}</span>
           </button>
         </div>
       </form>
@@ -270,6 +328,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [applying, setApplying] = useState(false);
   const [addingStore, setAddingStore] = useState(false);
+  const [expandingCatalog, setExpandingCatalog] = useState(false);
   const [message, setMessage] = useState("");
 
   async function load() {
@@ -324,30 +383,37 @@ export default function App() {
     }
   }
 
+  async function expandCatalog(payload) {
+    setExpandingCatalog(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await inventoryApi.expandCatalog(payload);
+      setMessage(result.message || "Expanded clone catalog");
+      await load();
+      return true;
+    } catch (catalogError) {
+      setError(catalogError.message);
+      return false;
+    } finally {
+      setExpandingCatalog(false);
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
 
   const totals = state.summary?.totals || {};
   const categoryRows = useMemo(() => state.summary?.topCategories || [], [state.summary]);
-  const cloneMode = isCloneEnvironment(state.health);
   const environmentLabel = state.health?.scenarioLabel || "local";
-  const workspaceEyebrow = cloneMode ? "Clone Inventory Control Center" : "Inventory Control Center";
-  const workspaceTitle = cloneMode
-    ? "Thin-cloned retail operations for safe scenario testing"
-    : "Production-like retail operations, safely cloned for testing";
-  const brandSubtitle = cloneMode ? "ExaDB-XS Thin Clone Demo · CLONE" : "ExaDB-XS Thin Clone Demo";
+  const workspaceEyebrow = "Inventory Control Center";
+  const workspaceTitle = "Production-like retail operations, safely cloned for testing";
+  const brandSubtitle = "ExaDB-XS Thin Clone Demo";
 
   useEffect(() => {
-    document.body.dataset.mode = cloneMode ? "clone" : "source";
-    document.title = cloneMode
-      ? `Retail Inventory Ops Clone - ${environmentLabel}`
-      : "Retail Inventory Ops Source";
-
-    return () => {
-      delete document.body.dataset.mode;
-    };
-  }, [cloneMode, environmentLabel]);
+    document.title = `Retail Inventory Ops - ${environmentLabel}`;
+  }, [environmentLabel]);
 
   return (
     <main className="shell">
@@ -378,11 +444,10 @@ export default function App() {
             <span className="eyebrow">{workspaceEyebrow}</span>
             <div className="title-row">
               <h1>{workspaceTitle}</h1>
-              {cloneMode && <span className="clone-badge">CLONE</span>}
             </div>
           </div>
           <div className="topbar-actions">
-            <button type="button" className="icon-button" onClick={load} disabled={loading || addingStore} title="Refresh dashboard data">
+            <button type="button" className="icon-button" onClick={load} disabled={loading || addingStore || expandingCatalog} title="Refresh dashboard data">
               <RefreshCw size={18} aria-hidden="true" />
               <span>Refresh</span>
             </button>
@@ -438,7 +503,8 @@ export default function App() {
             <section className="grid two" id="replenishment">
               <Recommendations recommendations={state.recommendations} />
               <div className="stack-panels" id="scenarios">
-                {cloneMode && <CloneStorePanel addingStore={addingStore} onAddStore={addDemoStore} />}
+                <CloneGrowthPanel expandingCatalog={expandingCatalog} onExpandCatalog={expandCatalog} totals={totals} />
+                <CloneStorePanel addingStore={addingStore} onAddStore={addDemoStore} />
                 <ScenarioPanel scenarios={state.scenarios} applying={applying} onApply={applyScenario} />
               </div>
             </section>

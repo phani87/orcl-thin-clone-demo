@@ -46,6 +46,11 @@ export function createRouter({ repository, config }) {
     response.status(201).json(store);
   }));
 
+  router.post("/catalog/expand", asyncHandler(async (request, response) => {
+    const result = await repository.expandCatalog(request.body || {});
+    response.status(201).json(result);
+  }));
+
   router.get("/products", asyncHandler(async (request, response) => {
     response.json(await repository.listProducts({
       limit: parseLimit(request.query.limit, 50, 500),

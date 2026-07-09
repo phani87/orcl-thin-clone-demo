@@ -115,10 +115,75 @@ Acceptance criteria:
 - Source on-hand quantity remains unchanged.
 - The clone app shows the scenario in the scenario log.
 
+## Interactive POST calls
+
+The same API is deployed to both environments. For isolated testing, send these calls to the clone deployment on port `3001`.
+
+Add a demo store in the clone deployment:
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/stores/demo \
+  -H "Content-Type: application/json" \
+  -d '{
+    "storeCode": "CLN252",
+    "storeName": "Clone Demo Store 252",
+    "regionName": "Clone Lab",
+    "city": "San Jose",
+    "stateCode": "CA",
+    "storeFormat": "Urban",
+    "status": "OPEN"
+  }'
+```
+
+Grow the clone from `20,000` products / `300,000` positions to `22,000` products / `430,000` positions:
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/catalog/expand \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetProducts": 22000,
+    "targetPositions": 430000,
+    "requestedBy": "retail-ops-demo"
+  }'
+```
+
+Validate the new totals:
+
+```bash
+curl http://127.0.0.1:3001/api/inventory/summary
+curl http://127.0.0.1:3000/api/inventory/summary
+```
+
+Expected result:
+
+- clone totals increase
+- source totals remain unchanged
+
+## Create a portable handoff bundle
+
+From the parent directory of the repo:
+
+```bash
+zip -r retail-inventory-ops-thin-clone-demo.zip retail-inventory-ops-thin-clone-demo
+```
+
+Transfer that zip to the Oracle Linux VM, unzip it, then run the deployment flow in this guide.
+
 ## Stop The Local Runtime
 
 ```bash
 ./scripts/stop-local.sh
+```
+
+## Redeploy After Updating The Repo
+
+```bash
+git pull origin main
+npm install
+./scripts/stop-local.sh
+./scripts/run-source-local.sh
+./scripts/run-clone-local.sh
+./scripts/status-local.sh
 ```
 
 ## Optional OKE Later

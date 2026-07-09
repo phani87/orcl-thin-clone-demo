@@ -27,6 +27,10 @@ export const inventoryApi = {
     method: "POST",
     body: JSON.stringify({ requestedBy: "retail-ops-demo", ...payload })
   }),
+  expandCatalog: (payload = {}) => request("/catalog/expand", {
+    method: "POST",
+    body: JSON.stringify({ requestedBy: "retail-ops-demo", ...payload })
+  }),
   products: () => request("/products?limit=12"),
   recommendations: () => request("/replenishment/recommendations?limit=12"),
   scenarios: () => request("/scenarios"),

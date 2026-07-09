@@ -5,8 +5,8 @@ This repository contains a retail inventory operations application designed to d
 The demo models a common retail workflow:
 
 - a source application runs against a seeded source PDB
-- a second copy of the same application runs against a thin-cloned PDB
-- teams can test replenishment changes, stock corrections, store edits, and scenario behavior in the clone without changing the source environment
+- a second deployment of the exact same application runs against a thin-cloned PDB
+- teams can test replenishment changes, stock corrections, store edits, and catalog growth in the clone without changing the source environment
 
 The application stack is:
 
@@ -26,20 +26,22 @@ This demo shows a cleaner pattern:
 1. seed a source Oracle PDB with realistic retail data
 2. deploy the application against that source database
 3. create a thin-cloned PDB using OCI CLI
-4. start a second copy of the app against the clone
+4. start a second copy of the same app against the clone
 5. make changes in the clone and verify that the source remains unchanged
 
 That makes this a development and testing workflow, not a DR workflow.
 
 ## Application overview
 
-The app focuses on retail inventory operations. It exposes a dashboard for inventory health, replenishment recommendations, scenario testing, products, and stores. In the clone environment, the app can also be used to change data such as store records or inventory-related scenario behavior without affecting the source environment.
+The app focuses on retail inventory operations. It exposes a dashboard for inventory health, replenishment recommendations, scenario testing, products, and stores. The same UI and API are deployed for both the source and clone environments. The only difference between those deployments is configuration: each points to a different pluggable database.
 
 Core API endpoints include:
 
 - `GET /api/health`
 - `GET /api/inventory/summary`
 - `GET /api/stores`
+- `POST /api/stores/demo`
+- `POST /api/catalog/expand`
 - `GET /api/products`
 - `GET /api/replenishment/recommendations`
 - `GET /api/scenarios`
@@ -71,7 +73,7 @@ The dashboard uses the schema and the inventory health view to classify position
 - `HEALTHY`
 - `OVERSTOCK`
 
-This gives the UI enough realism to show stock distribution, top categories, replenishment queues, and clone-only scenario changes.
+This gives the UI enough realism to show stock distribution, top categories, replenishment queues, and scenario-driven changes.
 
 ## Repository layout
 
@@ -230,6 +232,102 @@ The expected result is:
 - a scenario applied in the clone mutates clone data only
 - the source application remains unchanged
 
+## Interactive demo changes
+
+The application includes interactive controls for:
+
+- adding a demo store
+- applying scenario mutations
+- expanding the catalog to higher product and position counts
+
+For isolated testing, point those actions at the clone deployment.
+
+### Add a demo store in the clone deployment
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/stores/demo \
+  -H "Content-Type: application/json" \
+  -d '{
+    "storeCode": "CLN252",
+    "storeName": "Clone Demo Store 252",
+    "regionName": "Clone Lab",
+    "city": "San Jose",
+    "stateCode": "CA",
+    "storeFormat": "Urban",
+    "status": "OPEN"
+  }'
+```
+
+### Expand the clone catalog by API
+
+This example takes the clone from `20,000` products and `300,000` positions to `22,000` products and `430,000` positions:
+
+```bash
+curl -X POST http://127.0.0.1:3001/api/catalog/expand \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetProducts": 22000,
+    "targetPositions": 430000,
+    "requestedBy": "retail-ops-demo"
+  }'
+```
+
+You can verify the new totals with:
+
+```bash
+curl http://127.0.0.1:3001/api/inventory/summary
+curl http://127.0.0.1:3000/api/inventory/summary
+```
+
+The clone should show the larger counts. The source should remain unchanged.
+
+## Package this repo for a VM handoff
+
+If you want to move this demo to another Oracle Linux VM as a single artifact:
+
+```bash
+cd ..
+zip -r retail-inventory-ops-thin-clone-demo.zip retail-inventory-ops-thin-clone-demo
+```
+
+Copy that zip to the target VM, unzip it, then follow the deploy steps in the next section.
+
+## Deploy on the VM
+
+On the target Oracle Linux VM:
+
+```bash
+unzip retail-inventory-ops-thin-clone-demo.zip
+cd retail-inventory-ops-thin-clone-demo
+cp .env.example .env
+vi .env
+set -a
+source .env
+set +a
+npm install
+export SEED_SCALE=medium
+export RESET_SCHEMA=true
+./scripts/seed-source.sh
+./scripts/run-source-local.sh
+./scripts/clone-pdb.sh
+./scripts/run-clone-local.sh
+./scripts/status-local.sh
+```
+
+Then validate:
+
+```bash
+curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3001/api/health
+curl http://127.0.0.1:3000/api/inventory/summary
+curl http://127.0.0.1:3001/api/inventory/summary
+```
+
+Recommended browser targets:
+
+- source UI: `http://<vm-host>:5173`
+- clone UI: `http://<vm-host>:5174`
+
 ## Optional Kubernetes deployment path
 
 This repository also includes a Kubernetes-oriented path for later expansion.
@@ -270,6 +368,55 @@ npm run dev:ui
 ```
 
 If `DB_CONNECT_STRING` is not set, the API serves deterministic mock data so the frontend still works locally.
+
+## Redeploy after code changes
+
+If you update the repo and want to refresh the local compute VM demo:
+
+### 1. Pull the latest code
+
+```bash
+git pull origin main
+```
+
+### 2. Reinstall dependencies if package files changed
+
+```bash
+npm install
+```
+
+### 3. Stop any running source or clone processes
+
+```bash
+./scripts/stop-local.sh
+```
+
+### 4. Start the source app again
+
+```bash
+./scripts/run-source-local.sh
+```
+
+### 5. Start the clone app again
+
+```bash
+./scripts/run-clone-local.sh
+```
+
+### 6. Check runtime status
+
+```bash
+./scripts/status-local.sh
+```
+
+### 7. Verify both APIs
+
+```bash
+curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3001/api/health
+```
+
+If you changed the database seed logic and want a fresh data baseline, reseed the source PDB and create a fresh thin clone before restarting the clone app.
 
 ## Public repo safety notes
 

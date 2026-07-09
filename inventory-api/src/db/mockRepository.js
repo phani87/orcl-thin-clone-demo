@@ -1,4 +1,5 @@
 import { buildRetailData, SCALE_PRESETS } from "../../../db/seed/generateRetailData.mjs";
+import { buildCatalogExpansionPlan } from "../services/catalogExpansion.js";
 import {
   buildScenarioActions,
   rankRecommendations,
@@ -33,7 +34,7 @@ function createDemoStorePayload(payload = {}) {
   const suffix = String(Date.now()).slice(-6);
   return {
     store_code: payload.storeCode || `CLN${suffix}`,
-    store_name: payload.storeName || `Clone Showcase Store ${suffix}`,
+    store_name: payload.storeName || `Demo Showcase Store ${suffix}`,
     region_name: payload.regionName || "Clone Lab",
     city: payload.city || "San Jose",
     state_code: payload.stateCode || "CA",
@@ -168,6 +169,52 @@ export function createMockRepository(config) {
         storeFormat: inserted.store_format,
         status: inserted.status,
         message: `Added demo store ${inserted.store_code} in ${config.scenarioLabel}`
+      };
+    },
+
+    async expandCatalog(payload = {}) {
+      const plan = buildCatalogExpansionPlan({
+        currentProductCount: data.products.length,
+        currentPositionCount: data.positions.length,
+        targetProducts: payload.targetProducts,
+        targetPositions: payload.targetPositions,
+        stores: data.stores,
+        warehouses: data.warehouses
+      });
+
+      data.products.push(...plan.products.map((product) => ({
+        product_id: product.productId,
+        sku: product.sku,
+        product_name: product.productName,
+        category: product.category,
+        subcategory: product.subcategory,
+        brand: product.brand,
+        unit_cost: product.unitCost,
+        unit_price: product.unitPrice,
+        lifecycle_status: product.lifecycleStatus
+      })));
+
+      data.positions.push(...plan.positions.map((position) => ({
+        position_id: position.positionId,
+        product_id: position.productId,
+        location_type: position.locationType,
+        location_id: position.locationId,
+        on_hand: position.onHand,
+        reserved_qty: position.reservedQty,
+        reorder_point: position.reorderPoint,
+        reorder_qty: position.reorderQty,
+        safety_stock: position.safetyStock,
+        last_updated: new Date()
+      })));
+
+      return {
+        addedProducts: plan.products.length,
+        addedPositions: plan.positions.length,
+        totals: {
+          products: data.products.length,
+          inventoryPositions: data.positions.length
+        },
+        message: `Expanded ${config.scenarioLabel} by ${plan.products.length} products and ${plan.positions.length} positions`
       };
     },
 

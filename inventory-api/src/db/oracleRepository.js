@@ -1,4 +1,5 @@
 import { buildScenarioActions, scenarioTemplateFor } from "../services/inventorySignals.js";
+import { buildCatalogExpansionPlan } from "../services/catalogExpansion.js";
 
 function rowLimit(limit, fallback = 50, max = 500) {
   const parsed = Number(limit || fallback);
@@ -23,7 +24,7 @@ function createDemoStorePayload(payload = {}) {
   const suffix = String(Date.now()).slice(-6);
   return {
     storeCode: payload.storeCode || `CLN${suffix}`,
-    storeName: payload.storeName || `Clone Showcase Store ${suffix}`,
+    storeName: payload.storeName || `Demo Showcase Store ${suffix}`,
     regionName: payload.regionName || "Clone Lab",
     city: payload.city || "San Jose",
     stateCode: payload.stateCode || "CA",
@@ -159,6 +160,69 @@ export async function createOracleRepository(config) {
           storeId: result.outBinds.storeId[0],
           ...store,
           message: `Added demo store ${store.storeCode} in ${config.scenarioLabel}`
+        };
+      });
+    },
+
+    async expandCatalog(payload = {}) {
+      return withConnection(async (connection) => {
+        const [totals] = await query(`
+          select
+            (select count(*) from retail_products) as "products",
+            (select count(*) from inventory_positions) as "inventoryPositions"
+          from dual
+        `);
+
+        const stores = await query(`
+          select store_id as "storeId"
+          from retail_stores
+          order by store_id
+        `);
+        const warehouses = await query(`
+          select warehouse_id as "warehouseId"
+          from retail_warehouses
+          order by warehouse_id
+        `);
+
+        const plan = buildCatalogExpansionPlan({
+          currentProductCount: totals.products,
+          currentPositionCount: totals.inventoryPositions,
+          targetProducts: payload.targetProducts,
+          targetPositions: payload.targetPositions,
+          stores,
+          warehouses
+        });
+
+        if (plan.products.length) {
+          await connection.executeMany(
+            `insert into retail_products
+               (product_id, sku, product_name, category, subcategory, brand, unit_cost, unit_price, lifecycle_status)
+             values
+               (:productId, :sku, :productName, :category, :subcategory, :brand, :unitCost, :unitPrice, :lifecycleStatus)`,
+            plan.products
+          );
+        }
+
+        if (plan.positions.length) {
+          await connection.executeMany(
+            `insert into inventory_positions
+               (position_id, product_id, location_type, location_id, on_hand, reserved_qty, reorder_point, reorder_qty, safety_stock)
+             values
+               (:positionId, :productId, :locationType, :locationId, :onHand, :reservedQty, :reorderPoint, :reorderQty, :safetyStock)`,
+            plan.positions
+          );
+        }
+
+        await connection.commit();
+
+        return {
+          addedProducts: plan.products.length,
+          addedPositions: plan.positions.length,
+          totals: {
+            products: totals.products + plan.products.length,
+            inventoryPositions: totals.inventoryPositions + plan.positions.length
+          },
+          message: `Expanded ${config.scenarioLabel} by ${plan.products.length} products and ${plan.positions.length} positions`
         };
       });
     },
